@@ -1,4 +1,8 @@
+# Updated
+Updated for TTS(CE) = Also Known as TTN V3. The code requires the first server to be 'ttn' protocol.
+
 # Introduction
+
 This [balenaCloud](https://www.balena.io/cloud/) (previously resin.io) setup is based on the [Multi-protocol Packet Forwarder by Jac Kersing](https://github.com/kersing/packet_forwarder/tree/master/mp_pkt_fwd).
 
 An alternative guide to use this balenaCloud setup can be found in the official TTN documentation at: https://www.thethingsnetwork.org/docs/gateways/rak831/
@@ -6,11 +10,9 @@ An alternative guide to use this balenaCloud setup can be found in the official 
 ## Difference between Poly-packet-forwarder and Multi-protocol-packet-forwarder
 mp-pkt-fwd uses the new protocolbuffers-over-mqtt-over-tcp protocol for gateways, as defined by TTN and used by the TTN kickstarter gateway. Using this protcol the gateway is authenticated, which means it is registered under a specific user and can thus be trusted. Because it uses TCP, the chance of packet loss is much lower than with the previous protocol that used UDP. Protocolbuffers packs the data in a compact binary mode into packets, using much less space than the plaintext json that was previously used. It should therefore consume less bandwidth.
 
-When you use this repository, the settings you set on the TTN console are taken as the primary settings. The settings from the console are read and applied at gateway startup. If you for example change the location of the gateway on the console, that setting will only be applied when the gateway restarts.
-
 # balenaCloud TTN Gateway Connector for Raspberry Pi
 
-balenaCloud Dockerfile & scripts for [The Things Network](http://thethingsnetwork.org/) gateways based on the Raspberry Pi. This updated version uses the gateway connector protocol, not the old packet forwarder. See the [TTN documentation on Gateway Registration](https://www.thethingsnetwork.org/docs/gateways/registration.html).
+balenaCloud Dockerfile & scripts for [The Things Network](http://thethingsnetwork.org/) gateways based on the Raspberry Pi. This updated version uses the gateway connector protocol, not the old packet forwarder. See the [TTN documentation on Gateway Registration](https://www.thethingsindustries.com/docs/gateways/adding-gateways/), you need to create a gateway API key.
 
 Currently any Raspberry Pi with one of the following gateway boards, communicating over SPI, are supported, but not limited to these:
 * [IMST iC880A-SPI](http://webshop.imst.de/ic880a-spi-lorawan-concentrator-868mhz.html). Preferable configured as described [by TTN-ZH](https://github.com/ttn-zh/ic880a-gateway/wiki). You **do not** need to follow the **Setting up the software** step, as the setup scripts in this repository does it for you.
@@ -21,7 +23,7 @@ Currently any Raspberry Pi with one of the following gateway boards, communicati
 ## Prerequisites
 
 1. Build your hardware.
-2. Create a new gateway that uses `gateway connector` on the [TTN Console](https://console.thethingsnetwork.org/gateways). Also set the location and altitude of your gateway. We will come back to this console later to obtain the gateway ID and access key.
+2. Create a new gateway that uses `gateway connector` on the [TTN Console](https://console.thethingsnetwork.org/gateways). Also set the location and altitude of your gateway. Go to API keys and create a new API key with 'link as Gateway to a Gateway Server for traffic exchange, i.e. write uplink and read downlink' rights. Copy the secret and use it for GW_KEY later on.
 3. Create and sign into an account at https://www.balena.io/cloud/, which is the central "device dashboard".
 
 ## Create a balenaCloud application
@@ -45,7 +47,7 @@ For example, for an IMST iC880A or RAK831 with no GPS, the MINIMUM environment v
 Name      	  	   | Value  
 ------------------|--------------------------  
 GW_ID             | The gateway ID from the TTN console
-GW_KEY            | The gateway KEY from the TTN console
+GW_KEY            | The gateway API KEY secret key you copied earlier
 GW_RESET_PIN      | 22 (optional)
 
 GW_RESET_PIN can be left out if you are using Gonzalo Casas' backplane board, or any other setup using pin 22 as reset pin. This is because pin 22 is the default reset pin used by this balenaCloud setup.
@@ -58,7 +60,7 @@ For example a LinkLabs gateway, which has a built-in GPS, you need:
 Name      	  	   | Value  
 ------------------|--------------------------
 GW_ID             | The gateway ID from the TTN console
-GW_KEY            | The gateway KEY from the TTN console
+GW_KEY            | The gateway API KEY secret key you copied earlier
 GW_GPS            | true
 GW_RESET_PIN      | 29
 

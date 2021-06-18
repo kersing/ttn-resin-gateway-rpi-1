@@ -5,6 +5,7 @@ Date: 2017-02-26
 Based on: https://github.com/rayozzie/ttn-resin-gateway-rpi/blob/master/run.sh
 
 2019-11-08: Modified by pe1mew to add GW_LOGGER and GW_AUTOQUIT_THRESHOLD
+2021-06-11: Modified by kersing for TTS CE (also known as TTN V3)
 """
 import os
 import os.path
@@ -14,16 +15,19 @@ import time
 import uuid
 import json
 import subprocess
-try:
-  import RPi.GPIO as GPIO
-except RuntimeError:
-  print("Error importing RPi.GPIO!  This is probably because you need superuser privileges.  You can achieve this by using 'sudo' to run your script")
+
+# Allow testing on a 'regular' system
+if os.environ.get('TEST') == None:
+  try:
+    import RPi.GPIO as GPIO
+  except RuntimeError:
+    print("Error importing RPi.GPIO!  This is probably because you need superuser privileges.  You can achieve this by using 'sudo' to run your script")
+
+  if not os.path.exists("/opt/ttn-gateway/mp_pkt_fwd"):
+    print ("ERROR: gateway executable not found. Is it built yet?")
+    sys.exit(0)
 
 GWID_PREFIX="FFFE"
-
-if not os.path.exists("/opt/ttn-gateway/mp_pkt_fwd"):
-  print ("ERROR: gateway executable not found. Is it built yet?")
-  sys.exit(0)
 
 if os.environ.get('HALT') != None:
   print ("*** HALT asserted - exiting ***")
@@ -31,14 +35,14 @@ if os.environ.get('HALT') != None:
 
 # Show info about the machine we're running on
 print ("*** Resin Machine Info:")
-print ("*** Type: "+str(os.environ.get('RESIN_MACHINE_NAME')))
-print ("*** Arch: "+str(os.environ.get('RESIN_ARCH')))
+print ("*** Type: "+str(os.environ.get('BALENA_MACHINE_NAME')))
+print ("*** Arch: "+str(os.environ.get('BALENA_ARCH')))
 
-if os.environ.get("RESIN_HOST_CONFIG_core_freq")!=None:
-  print ("*** Core freq: "+str(os.environ.get('RESIN_HOST_CONFIG_core_freq')))
+if os.environ.get("BALENA_HOST_CONFIG_core_freq")!=None:
+  print ("*** Core freq: "+str(os.environ.get('BALENA_HOST_CONFIG_core_freq')))
 
-if os.environ.get("RESIN_HOST_CONFIG_dtoverlay")!=None:
-  print ("*** UART mode: "+str(os.environ.get('RESIN_HOST_CONFIG_dtoverlay')))
+if os.environ.get("BALENA_HOST_CONFIG_dtoverlay")!=None:
+  print ("*** UART mode: "+str(os.environ.get('BALENA_HOST_CONFIG_dtoverlay')))
 
 
 # Check if the correct environment variables are set
@@ -57,10 +61,11 @@ else:
 
 print ("GW_EUI:\t"+my_eui)
 
-if os.environ.get("ACCOUNT_SERVER_DOMAIN")==None:
-  account_server_domain="account.thethingsnetwork.org"
+if os.environ.get("TTSCE_CLUSTER")==None:
+  ttsce_domain="eu1.cloud.thethings.network"
 else:
-  account_server_domain=os.environ.get("ACCOUNT_SERVER_DOMAIN")
+  ttsce_domain=os.environ.get("TTSCE_CLUSTER")+".cloud.thethings.network"
+print("TTS(CE) Cluster: %s" % ttsce_domain)
 
 # Define default configs
 description = os.getenv('GW_DESCRIPTION', "")
@@ -68,24 +73,6 @@ placement = ""
 latitude = os.getenv('GW_REF_LATITUDE', 0)
 longitude = os.getenv('GW_REF_LONGITUDE', 0)
 altitude = os.getenv('GW_REF_ALTITUDE', 0)
-frequency_plan_url = os.getenv('FREQ_PLAN_URL', "https://%s/api/v2/frequency-plans/EU_863_870" % account_server_domain)
-
-"""
-Takes a router address as input, and returns it in the format expected for the packet forwarder configuration
-"""
-def sanitize_router_address(address):
-  address_no_proto = ""
-  splitted_by_protocol = address.split("://")
-  if len(splitted_by_protocol) == 1:
-    address_no_proto = address
-  else:
-    address_no_proto = splitted_by_protocol[1]
-
-  # Workaround as the account server returns mqtts ports which we can't connect to
-  address_no_proto = address_no_proto.replace(":8883", ":1883")
-  address_no_proto = address_no_proto.replace(":8882", ":1882")
-
-  return address_no_proto
 
 # Fetch config from TTN if TTN is enabled
 if(os.getenv('SERVER_TTN', "true")=="true"):
@@ -103,6 +90,8 @@ if(os.getenv('SERVER_TTN', "true")=="true"):
     print ("See https://www.thethingsnetwork.org/docs/gateways/registration.html#via-gateway-connector")
     sys.exit(0)
 
+  config_url = os.getenv('FREQ_PLAN_URL', "https://%s/api/v3/gcs/gateways/%s/semtechudp/global_conf.json" % (ttsce_domain,my_gw_id))
+
   print ("*******************")
   print ("*** Fetching config from TTN account server")
   print ("*******************")
@@ -111,8 +100,8 @@ if(os.getenv('SERVER_TTN', "true")=="true"):
   config_response = ""
   while True:
     try:
-      req = urllib2.Request('https://%s/api/v2/gateways/%s' % (account_server_domain, my_gw_id))
-      req.add_header('Authorization', 'Key '+os.environ.get("GW_KEY"))
+      req = urllib2.Request(config_url)
+      req.add_header('Authorization', 'Bearer '+os.environ.get("GW_KEY"))
       response = urllib2.urlopen(req, timeout=30)
       config_response = response.read()
     except urllib2.URLError as err: 
@@ -130,84 +119,37 @@ if(os.getenv('SERVER_TTN', "true")=="true"):
     print ("Unable to parse configuration from TTN")
     sys.exit(0)
 
-  frequency_plan = ttn_config.get('frequency_plan', "EU_863_870")
-  frequency_plan_url = ttn_config.get('frequency_plan_url', "https://%s/api/v2/frequency-plans/EU_863_870" % account_server_domain)
-
   if os.environ.get("ROUTER_MQTT_ADDRESS"):
-    router = sanitize_router_address(os.environ.get("ROUTER_MQTT_ADDRESS"))
-  elif "router" in ttn_config:
-    fetched_router_address = ttn_config['router'].get('mqtt_address', "mqtt://router.dev.thethings.network:1883")
-    router = sanitize_router_address(fetched_router_address)
+    router = os.environ.get("ROUTER_MQTT_ADDRESS")
+  elif "gateway_conf" in ttn_config:
+    router = ttn_config['gateway_conf'].get('server_address', "eu1.cloud.thethings.network")
+    router = router+':1881'
   else:
-    router = "router.dev.thethings.network"
-
-  if "attributes" in ttn_config:
-    description = ttn_config['attributes'].get('description', "")
-    placement = ttn_config['attributes'].get('placement', "unknown")
-
-  if "antenna_location" in ttn_config:
-    latitude = ttn_config['antenna_location'].get('latitude', 0)
-    longitude = ttn_config['antenna_location'].get('longitude', 0)
-    altitude = ttn_config['antenna_location'].get('altitude', 0)
-
-  fallback_routers = []
-  if "fallback_routers" in ttn_config:
-    for fb_router in ttn_config["fallback_routers"]:
-      if "mqtt_address" in fb_router:
-        fallback_routers.append(fb_router["mqtt_address"])
-
+    router = "eu1.cloud.thethings.network:1881"
 
   print ("Gateway ID:\t"+my_gw_id)
   print ("Gateway Key:\t"+os.environ.get("GW_KEY"))
-  print ("Frequency plan:\t\t"+frequency_plan)
-  print ("Frequency plan url:\t"+frequency_plan_url)
-  print ("Gateway description:\t"+description)
-  print ("Gateway placement:\t"+placement)
-  print ("Router:\t\t\t"+router)
+  print ("Router:\t\t"+router)
   print ("")
-  print ("Fallback routers:")
-  for fb_router in fallback_routers:
-    print ("\t"+fb_router)
 # Done fetching config from TTN
 else:
-  print ("TTN gateway connector disabled. Not fetching config from account server.")
+  print ("TTN gateway connector disabled. Exitting.")
+  sys.exit(1)
 
-print ("Latitude:\t\t"+str(latitude))
-print ("Longitude:\t\t"+str(longitude))
-print ("Altitude:\t\t"+str(altitude))
 print ("Gateway EUI:\t"+my_eui)
 print ("Has hardware GPS:\t"+str(os.getenv('GW_GPS', False)))
 print ("Hardware GPS port:\t"+os.getenv('GW_GPS_PORT', "/dev/ttyAMA0"))
 
-
-
-# Retrieve global_conf
-sx1301_conf = {}
-try:
-  response = urllib2.urlopen(frequency_plan_url, timeout=30)
-  global_conf = response.read()
-  global_conf_object = json.loads(global_conf)
-  if('SX1301_conf' in global_conf_object):
-    sx1301_conf = global_conf_object['SX1301_conf']
-except urllib2.URLError as err: 
-  print ("Unable to fetch global conf from Github")
-  sys.exit(0)
-
+sx1301_conf = ttn_config['SX1301_conf']
 sx1301_conf['antenna_gain'] = float(os.getenv('GW_ANTENNA_GAIN', 0))
-
 
 # Build local_conf
 gateway_conf = {}
 gateway_conf['gateway_ID'] = my_eui
 gateway_conf['contact_email'] = os.getenv('GW_CONTACT_EMAIL', "")
 gateway_conf['description'] = description
-gateway_conf['stat_file'] = 'loragwstat.json'
 gateway_conf['push_timeout_ms'] = int(os.getenv("GW_PUSH_TIMEOUT", 100)) # Default in code is 100
 
-if(os.getenv('GW_LOGGER', "false")=="true"):
-  gateway_conf['logger'] = True
-else:
-  gateway_conf['logger'] = False
 
 if(os.getenv('GW_FWD_CRC_ERR', "false")=="true"):
   #default is False
@@ -251,6 +193,8 @@ else:
 if(os.getenv('GW_LOGGER', "false")=="true"):
   gateway_conf['logger'] = True
   print ("Packet logging enabled")
+else:
+  gateway_conf['logger'] = False
 
 # Autoquit when a number of PULL_ACKs have been missed
 autoquit_threshold = int(os.getenv('GW_AUTOQUIT_THRESHOLD', 0))
@@ -266,7 +210,6 @@ if(os.getenv('SERVER_TTN', "true")=="true"):
   server = {}
   server['serv_type'] = "ttn"
   server['server_address'] = router
-  server['server_fallbacks'] = fallback_routers
   server['serv_gw_id'] = my_gw_id
   server['serv_gw_key'] = os.environ.get("GW_KEY")
   server['serv_enabled'] = True
@@ -345,10 +288,14 @@ if(os.getenv('SERVER_3_ENABLED', "false")=="true"):
 # We merge the json objects from the global_conf and local_conf and save it to the global_conf.
 # Therefore there will not be a local_conf.json file.
 local_conf = {'SX1301_conf': sx1301_conf, 'gateway_conf': gateway_conf}
-with open('/opt/ttn-gateway/global_conf.json', 'w') as the_file:
-  the_file.write(json.dumps(local_conf, indent=4))
 
-
+if os.environ.get('TEST') == None:
+  with open('/opt/ttn-gateway/global_conf.json', 'w') as the_file:
+    the_file.write(json.dumps(local_conf, indent=4))
+else:
+  with open('global_conf.json', 'w') as the_file:
+    the_file.write(json.dumps(local_conf, indent=4))
+  sys.exit(0)
 
 # Endless loop to reset and restart packet forwarder
 while True:
