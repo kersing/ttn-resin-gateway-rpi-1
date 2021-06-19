@@ -61,10 +61,10 @@ else:
 
 print ("GW_EUI:\t"+my_eui)
 
-if os.environ.get("TTSCE_CLUSTER")==None:
+if os.environ.get("GW_TTSCE_CLUSTER")==None:
   ttsce_domain="eu1.cloud.thethings.network"
 else:
-  ttsce_domain=os.environ.get("TTSCE_CLUSTER")+".cloud.thethings.network"
+  ttsce_domain=os.environ.get("GW_TTSCE_CLUSTER")+".cloud.thethings.network"
 print("TTS(CE) Cluster: %s" % ttsce_domain)
 
 # Define default configs

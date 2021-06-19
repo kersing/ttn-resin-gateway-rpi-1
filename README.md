@@ -46,6 +46,7 @@ For example, for an IMST iC880A or RAK831 with no GPS, the MINIMUM environment v
 
 Name      	  	   | Value  
 ------------------|--------------------------  
+GW_TTSCE_CLUSTER  | The TTS(CE) cluster being used: eu1, nam1, au1
 GW_ID             | The gateway ID from the TTN console
 GW_KEY            | The gateway API KEY secret key you copied earlier
 GW_RESET_PIN      | 22 (optional)
@@ -59,6 +60,7 @@ For example a LinkLabs gateway, which has a built-in GPS, you need:
 
 Name      	  	   | Value  
 ------------------|--------------------------
+GW_TTSCE_CLUSTER  | The TTS(CE) cluster being used: eu1, nam1, au1
 GW_ID             | The gateway ID from the TTN console
 GW_KEY            | The gateway API KEY secret key you copied earlier
 GW_GPS            | true
@@ -100,8 +102,8 @@ Add a New config variable as follows:
 
 Name      	            	    | Value  
 ------------------------------|--------------------------  
-RESIN_HOST_CONFIG_core_freq   | 250
-RESIN_HOST_CONFIG_dtoverlay   | pi3-miniuart-bt
+BALENA_HOST_CONFIG_core_freq   | 250
+BALENA_HOST_CONFIG_dtoverlay   | pi3-miniuart-bt
 
 ## TRANSFERRING TTN GATEWAY SOFTWARE TO BALENACLOUD SO THAT IT MAY BE DOWNLOADED ON YOUR DEVICES
 
