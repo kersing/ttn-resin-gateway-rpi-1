@@ -1,4 +1,4 @@
-FROM balenalib/%%BALENA_MACHINE_NAME%%-debian:latest-build AS buildstep
+FROM balenalib/%%BALENA_MACHINE_NAME%%-debian:buster AS buildstep
 
 WORKDIR /opt/ttn-gateway/
 
@@ -20,7 +20,7 @@ RUN install_packages \
 COPY dev dev
 RUN ./dev/build.sh
 
-FROM balenalib/%%BALENA_MACHINE_NAME%%-debian:latest-run
+FROM balenalib/%%BALENA_MACHINE_NAME%%-debian:buster
 
 ENV UDEV=off
 
